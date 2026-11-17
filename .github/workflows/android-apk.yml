@@ -51,6 +51,10 @@ jobs:
 
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
+        with:
+          # The legacy "tools" package no longer exists in the current SDK repository.
+          packages: platform-tools
+          accept-android-sdk-licenses: true
 
       - name: Find Android project and build APK
         shell: bash
