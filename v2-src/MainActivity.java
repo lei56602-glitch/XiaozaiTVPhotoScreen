@@ -99,11 +99,11 @@ public class MainActivity extends Activity{
  }
  void deleteSelected(){
   if(selectedPaths.isEmpty()){new AlertDialog.Builder(this).setMessage("请先选择要删除的图片。").setPositiveButton("知道了",null).show();return;}
-  int amount=selectedPaths.size();int firstIndex=pics.size()-1;for(int i=0;i<pics.size();i++)if(selectedPaths.contains(pics.get(i).getAbsolutePath())){firstIndex=i;break;}
+  int amount=selectedPaths.size();int firstIndex=pics.size()-1;for(int i=0;i<pics.size();i++)if(selectedPaths.contains(pics.get(i).getAbsolutePath())){firstIndex=i;break;}final int focusIndex=firstIndex;
   new AlertDialog.Builder(this).setTitle("批量删除").setMessage("确定删除选中的 "+amount+" 张图片吗？\\n只删除小李视觉图库副本，不影响手机、U盘或其他位置的原文件。")
    .setNegativeButton("取消",null).setPositiveButton("确认删除",(d,w)->{
     int deleted=0;for(String path:new HashSet<>(selectedPaths)){File f=new File(path);if(f.exists()&&f.delete())deleted++;}
-    selectedPaths.clear();selectionMode=false;load();if(!pics.isEmpty())focusAfterRender="gallery:"+pics.get(Math.min(firstIndex,pics.size()-1)).getAbsolutePath();
+    selectedPaths.clear();selectionMode=false;load();if(!pics.isEmpty())focusAfterRender="gallery:"+pics.get(Math.min(focusIndex,pics.size()-1)).getAbsolutePath();
     new AlertDialog.Builder(this).setMessage("已删除 "+deleted+" 张图片。").setPositiveButton("确定",(a,b)->render()).setOnCancelListener(a->render()).show();
    }).show();
  }
