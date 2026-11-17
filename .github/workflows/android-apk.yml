@@ -3,7 +3,7 @@ name: Android APK Build
 on:
   workflow_dispatch:
   push:
-    branches: [ "main" ]
+    branches: [ "main", "v2.0-development" ]
     paths:
       - "source.zip"
       - "*.zip"
@@ -42,6 +42,9 @@ jobs:
           fi
           PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
           patch -p1 --batch -d "$PROJECT_DIR" < "$GITHUB_WORKSPACE/patches/xiaozai-v1.1.patch"
+          cp "$GITHUB_WORKSPACE/v2-src/MainActivity.java" "$PROJECT_DIR/app/src/main/java/com/xiaozai/photoscreen/MainActivity.java"
+          sed -i "s/versionCode 2/versionCode 3/; s/versionName/versionName/" "$PROJECT_DIR/app/build.gradle"
+          sed -i "s/小崽子视觉/小李视觉/g" "$PROJECT_DIR/app/src/main/AndroidManifest.xml"
           echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
           echo "Updated source files:"
           find "$PROJECT_DIR" -maxdepth 8 -type f | sort
@@ -49,7 +52,7 @@ jobs:
       - name: Upload updated source
         uses: actions/upload-artifact@v4
         with:
-          name: XiaozaiTVPhotoScreen-source-v1.1
+          name: XiaoliVision-source-v2.0
           path: extracted/
           if-no-files-found: error
           retention-days: 3
@@ -88,7 +91,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: XiaozaiTVPhotoScreen-debug-apk-v1.1
+          name: XiaoliVision-debug-apk-v2.0
           path: apk-output/*.apk
           if-no-files-found: error
           retention-days: 90
