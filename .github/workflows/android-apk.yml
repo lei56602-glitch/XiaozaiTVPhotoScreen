@@ -24,24 +24,28 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           if [ -f "source.zip" ]; then
             ZIP_FILE="source.zip"
           else
             ZIP_FILE="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
           fi
-
           if [ -z "${ZIP_FILE:-}" ]; then
             echo "::error::No source ZIP found in the repository root."
             exit 1
           fi
-
           echo "Extracting: $ZIP_FILE"
           mkdir -p extracted
           unzip -oq "$ZIP_FILE" -d extracted
-
           echo "Extracted project files:"
-          find extracted -maxdepth 4 -type f | head -200
+          find extracted -maxdepth 6 -type f | head -300
+
+      - name: Upload extracted source for inspection
+        uses: actions/upload-artifact@v4
+        with:
+          name: XiaozaiTVPhotoScreen-source
+          path: extracted/
+          if-no-files-found: error
+          retention-days: 3
 
       - name: Set up Java
         uses: actions/setup-java@v4
@@ -57,7 +61,6 @@ jobs:
       - name: Set up Android SDK
         uses: android-actions/setup-android@v3
         with:
-          # The legacy "tools" package no longer exists in the current SDK repository.
           packages: platform-tools
           accept-android-sdk-licenses: true
 
@@ -65,25 +68,18 @@ jobs:
         shell: bash
         run: |
           set -euo pipefail
-
           SETTINGS_FILE="$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
           if [ -z "$SETTINGS_FILE" ]; then
             echo "::error::Could not find settings.gradle or settings.gradle.kts in the extracted ZIP."
             exit 1
           fi
-
           PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
           cd "$PROJECT_DIR"
-
           echo "Android project directory: $PROJECT_DIR"
-          echo "Using installed Gradle:"
           gradle --version
-
           gradle --no-daemon assembleDebug
-
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
           find . -type f -path '*/build/outputs/apk/*/*.apk' -exec cp {} "$GITHUB_WORKSPACE/apk-output/" \;
-
           if [ -z "$(find "$GITHUB_WORKSPACE/apk-output" -type f -name '*.apk' -print -quit)" ]; then
             echo "::error::Build completed but no APK was found."
             exit 1
