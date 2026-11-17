@@ -1,0 +1,223 @@
+diff -ruN a/app/build.gradle b/app/build.gradle
+--- a/app/build.gradle
++++ b/app/build.gradle
+@@ -8,8 +8,8 @@
+         applicationId 'com.xiaozai.photoscreen'
+         minSdk 23
+         targetSdk 28
+-        versionCode 1
+-        versionName '1.0'
++        versionCode 2
++        versionName '1.1'
+     }
+ }
+ 
+diff -ruN a/app/src/main/AndroidManifest.xml b/app/src/main/AndroidManifest.xml
+--- a/app/src/main/AndroidManifest.xml
++++ b/app/src/main/AndroidManifest.xml
+@@ -5,7 +5,9 @@
+     <uses-feature android:name="android.hardware.touchscreen" android:required="false"/>
+     <application
+         android:theme="@android:style/Theme.Material.Light.NoActionBar"
+-        android:label="小崽子 TV 图片展屏"
++        android:label="小崽子视觉"
++        android:icon="@drawable/ic_launcher"
++        android:roundIcon="@drawable/ic_launcher"
+         android:usesCleartextTraffic="true"
+         android:allowBackup="false"
+         android:supportsRtl="true">
+diff -ruN a/app/src/main/java/com/xiaozai/photoscreen/MainActivity.java b/app/src/main/java/com/xiaozai/photoscreen/MainActivity.java
+--- a/app/src/main/java/com/xiaozai/photoscreen/MainActivity.java
++++ b/app/src/main/java/com/xiaozai/photoscreen/MainActivity.java
+@@ -12,6 +12,8 @@
+ import android.view.WindowManager;
+ import android.widget.*;
+ import android.content.Context;
++import android.content.Intent;
++import android.net.Uri;
+ import android.net.wifi.WifiManager;
+ import android.text.format.Formatter;
+ 
+@@ -33,6 +35,9 @@
+     private LinearLayout root;
+     private TextView status, countText;
+     private ImageView qrView, photoView;
++    private LinearLayout leftPanel;
++    private boolean fullscreen = false;
++    private static final int PICK_IMAGES = 2101;
+     private Handler handler = new Handler();
+     private List<File> photos = new ArrayList<>();
+     private int photoIndex = 0;
+@@ -81,38 +86,43 @@
+         root.setBackgroundColor(Color.rgb(12, 16, 25));
+         root.setPadding(28, 24, 28, 24);
+ 
+-        LinearLayout left = new LinearLayout(this);
+-        left.setOrientation(LinearLayout.VERTICAL);
+-        left.setGravity(Gravity.CENTER);
+-        left.setPadding(12, 12, 24, 12);
+-        root.addView(left, new LinearLayout.LayoutParams(0, -1, 0.34f));
++        leftPanel = new LinearLayout(this);
++        leftPanel.setOrientation(LinearLayout.VERTICAL);
++        leftPanel.setGravity(Gravity.CENTER);
++        leftPanel.setPadding(12, 12, 24, 12);
++        root.addView(leftPanel, new LinearLayout.LayoutParams(0, -1, 0.34f));
+ 
+-        TextView title = text("小崽子 TV 智能图片展屏", 25, Color.WHITE, true);
+-        left.addView(title);
++        TextView title = text("小崽子视觉", 29, Color.WHITE, true);
++        leftPanel.addView(title);
+         TextView hint = text("手机与电视连接同一个 Wi-Fi，微信扫码上传图片", 15, Color.LTGRAY, false);
+         hint.setGravity(Gravity.CENTER);
+         LinearLayout.LayoutParams hp = new LinearLayout.LayoutParams(-1, -2);
+-        hp.topMargin = 16; left.addView(hint, hp);
++        hp.topMargin = 16; leftPanel.addView(hint, hp);
+ 
+         qrView = new ImageView(this);
+         qrView.setAdjustViewBounds(true);
+         qrView.setScaleType(ImageView.ScaleType.FIT_CENTER);
+         LinearLayout.LayoutParams qp = new LinearLayout.LayoutParams(280, 280);
+-        qp.topMargin = 22; left.addView(qrView, qp);
++        qp.topMargin = 22; leftPanel.addView(qrView, qp);
+ 
+         status = text("正在启动局域网上传服务…", 14, Color.WHITE, false);
+         status.setGravity(Gravity.CENTER);
+         LinearLayout.LayoutParams sp = new LinearLayout.LayoutParams(-1, -2);
+-        sp.topMargin = 14; left.addView(status, sp);
++        sp.topMargin = 14; leftPanel.addView(status, sp);
+ 
+         countText = text("图片数量：0", 14, Color.LTGRAY, false);
+         countText.setGravity(Gravity.CENTER);
+-        left.addView(countText);
++        leftPanel.addView(countText);
++
++        Button local = new Button(this);
++        local.setText("从电视本地添加图片");
++        local.setOnClickListener(v -> pickLocalImages());
++        leftPanel.addView(local);
+ 
+         Button refresh = new Button(this);
+         refresh.setText("刷新图片");
+         refresh.setOnClickListener(v -> refreshPhotos());
+-        left.addView(refresh);
++        leftPanel.addView(refresh);
+ 
+         photoView = new ImageView(this);
+         photoView.setBackgroundColor(Color.BLACK);
+@@ -130,7 +140,7 @@
+ 
+     private void startServer() {
+         try {
+-            server = new PhotoServer(8765, new File(getFilesDir(), "photos"));
++            server = new PhotoServer(8765, new File(getFilesDir(), "photos"), () -> runOnUiThread(() -> enterFullscreen()));
+             server.start(NanoHTTPD.SOCKET_READ_TIMEOUT, false);
+             String ip = getLanIp();
+             String url = "http://" + ip + ":8765/";
+@@ -162,6 +172,75 @@
+         return bmp;
+     }
+ 
++    private void pickLocalImages() {
++        Intent intent = new Intent(Intent.ACTION_OPEN_DOCUMENT);
++        intent.addCategory(Intent.CATEGORY_OPENABLE);
++        intent.setType("image/*");
++        intent.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true);
++        startActivityForResult(intent, PICK_IMAGES);
++    }
++
++    @Override protected void onActivityResult(int requestCode, int resultCode, Intent data) {
++        super.onActivityResult(requestCode, resultCode, data);
++        if (requestCode != PICK_IMAGES || resultCode != RESULT_OK || data == null) return;
++        new Thread(() -> {
++            int added = 0;
++            try {
++                if (data.getClipData() != null) {
++                    for (int i = 0; i < data.getClipData().getItemCount(); i++) {
++                        if (copyPickedImage(data.getClipData().getItemAt(i).getUri())) added++;
++                    }
++                } else if (data.getData() != null && copyPickedImage(data.getData())) added++;
++            } catch (Exception ignored) {}
++            final int count = added;
++            runOnUiThread(() -> {
++                if (count > 0) enterFullscreen();
++                Toast.makeText(this, count > 0 ? "已添加 " + count + " 张图片" : "没有添加图片", Toast.LENGTH_SHORT).show();
++                refreshPhotos();
++            });
++        }).start();
++    }
++
++    private boolean copyPickedImage(Uri uri) {
++        try (InputStream in = getContentResolver().openInputStream(uri)) {
++            if (in == null) return false;
++            File dir = new File(getFilesDir(), "photos");
++            if (!dir.exists()) dir.mkdirs();
++            String name = "local_" + System.currentTimeMillis() + "_" + UUID.randomUUID().toString().substring(0, 6) + ".jpg";
++            try (OutputStream out = new FileOutputStream(new File(dir, name))) {
++                byte[] buf = new byte[16384]; int n;
++                while ((n = in.read(buf)) > 0) out.write(buf, 0, n);
++            }
++            return true;
++        } catch (Exception e) { return false; }
++    }
++
++    private void enterFullscreen() {
++        if (fullscreen) { refreshPhotos(); return; }
++        fullscreen = true;
++        leftPanel.setVisibility(View.GONE);
++        root.setPadding(0, 0, 0, 0);
++        LinearLayout.LayoutParams lp = (LinearLayout.LayoutParams) photoView.getLayoutParams();
++        lp.width = -1; lp.weight = 1f;
++        photoView.setLayoutParams(lp);
++        refreshPhotos();
++    }
++
++    private void exitFullscreen() {
++        if (!fullscreen) return;
++        fullscreen = false;
++        leftPanel.setVisibility(View.VISIBLE);
++        root.setPadding(28, 24, 28, 24);
++        LinearLayout.LayoutParams left = (LinearLayout.LayoutParams) leftPanel.getLayoutParams();
++        left.width = 0; left.weight = 0.34f; leftPanel.setLayoutParams(left);
++        LinearLayout.LayoutParams photo = (LinearLayout.LayoutParams) photoView.getLayoutParams();
++        photo.width = 0; photo.weight = 0.66f; photoView.setLayoutParams(photo);
++    }
++
++    @Override public void onBackPressed() {
++        if (fullscreen) exitFullscreen(); else super.onBackPressed();
++    }
++
+     private void refreshPhotos() {
+         if (refreshing.getAndSet(true)) return;
+         new Thread(() -> {
+@@ -202,8 +281,9 @@
+ 
+     private static class PhotoServer extends NanoHTTPD {
+         private final File dir;
+-        PhotoServer(int port, File directory) throws IOException {
+-            super(port); dir = directory; if (!dir.exists()) dir.mkdirs();
++        private final Runnable onUpload;
++        PhotoServer(int port, File directory, Runnable callback) throws IOException {
++            super(port); dir = directory; onUpload = callback; if (!dir.exists()) dir.mkdirs();
+         }
+         @Override public Response serve(IHTTPSession session) {
+             try {
+@@ -230,6 +310,7 @@
+                         byte[] buf = new byte[8192]; int n;
+                         while ((n=in.read(buf))>0) os.write(buf,0,n);
+                     }
++                    if (onUpload != null) onUpload.run();
+                     return newFixedLengthResponse(Response.Status.OK, "application/json; charset=utf-8",
+                         new JSONObject().put("ok", true).put("name", out.getName()).toString());
+                 }
+diff -ruN a/app/src/main/res/drawable/ic_launcher.xml b/app/src/main/res/drawable/ic_launcher.xml
+--- /dev/null
++++ b/app/src/main/res/drawable/ic_launcher.xml
+@@ -0,0 +1,8 @@
++<vector xmlns:android="http://schemas.android.com/apk/res/android"
++    android:width="108dp" android:height="108dp" android:viewportWidth="108" android:viewportHeight="108">
++    <path android:fillColor="#101827" android:pathData="M0,0h108v108h-108z"/>
++    <path android:fillColor="#243B5A" android:pathData="M18,22h72a8,8 0,0 1,8 8v48a8,8 0,0 1,-8 8h-72a8,8 0,0 1,-8 -8v-48a8,8 0,0 1,8 -8z"/>
++    <path android:fillColor="#42D3A5" android:pathData="M25,72l17,-20 12,13 11,-15 19,22z"/>
++    <path android:fillColor="#FFD166" android:pathData="M69,38a8,8 0,1 0,16 0a8,8 0,1 0,-16 0"/>
++    <path android:fillColor="#FFFFFF" android:pathData="M24,17h60v4h-60z"/>
++</vector>
