@@ -1,7 +1,7 @@
 package com.xiaozai.photoscreen;
 import android.app.*;import android.os.*;import android.content.*;import android.database.Cursor;import android.provider.OpenableColumns;import android.net.*;import android.graphics.*;import android.graphics.drawable.*;import android.view.*;import android.widget.*;import java.io.*;import java.net.*;import java.util.*;import com.google.zxing.*;import com.google.zxing.common.BitMatrix;import fi.iki.elonen.NanoHTTPD;
 public class MainActivity extends Activity{
- LinearLayout root,side,body;ImageView hero,fullScreenImage;Dialog fullScreenDialog;List<File> pics=new ArrayList<>();int page=0,pos=0,delay=5;boolean en=false,playing=true,shuffle=false;Handler h=new Handler();PhotoServer server;
+ LinearLayout root,side,body;ImageView hero,fullScreenImage;Dialog fullScreenDialog;List<File> pics=new ArrayList<>();int page=0,pos=0,delay=5;boolean en=false,playing=true,shuffle=false,selectionMode=false;Set<String> selectedPaths=new HashSet<>();Handler h=new Handler();PhotoServer server;
  String[] zh={"首页","图片管理","手机上传","播放设置","系统设置","关于"},us={"Home","Gallery","Phone Upload","Slideshow","System","About"};
  File dir(){File f=new File(getFilesDir(),"photos");f.mkdirs();return f;}String s(String a,String b){return en?b:a;}int dp(int x){return (int)(x*getResources().getDisplayMetrics().density+.5f);}
  TextView txt(String x,int z,int c,boolean bold){TextView t=new TextView(this);t.setText(x);t.setTextSize(z);t.setTextColor(c);if(bold)t.setTypeface(null,1);return t;}
@@ -40,7 +40,53 @@ public class MainActivity extends Activity{
  void showPhoto(boolean crossfade){if(pics.isEmpty()||page!=0)return;Bitmap next=bitmap(pics.get(pos),1200);if(next==null)return;BitmapDrawable nd=new BitmapDrawable(getResources(),next);if(hero!=null){Drawable previous=hero.getDrawable();if(crossfade&&previous!=null){TransitionDrawable td=new TransitionDrawable(new Drawable[]{previous,nd});td.setCrossFadeEnabled(true);hero.setImageDrawable(td);td.startTransition(520);}else hero.setImageDrawable(nd);}if(fullScreenImage!=null){Drawable previous=fullScreenImage.getDrawable();if(crossfade&&previous!=null){TransitionDrawable td=new TransitionDrawable(new Drawable[]{previous,new BitmapDrawable(getResources(),next)});td.setCrossFadeEnabled(true);fullScreenImage.setImageDrawable(td);td.startTransition(520);}else fullScreenImage.setImageBitmap(next);}}
  void openFullScreen(){if(pics.isEmpty()||fullScreenDialog!=null)return;fullScreenDialog=new Dialog(this,android.R.style.Theme_Black_NoTitleBar_Fullscreen);FrameLayout frame=new FrameLayout(this);frame.setBackgroundColor(0xff000000);fullScreenImage=new ImageView(this);fullScreenImage.setScaleType(ImageView.ScaleType.FIT_CENTER);fullScreenImage.setFocusable(true);fullScreenImage.setFocusableInTouchMode(true);fullScreenImage.setImageBitmap(bitmap(pics.get(pos),1600));frame.addView(fullScreenImage,new FrameLayout.LayoutParams(-1,-1));fullScreenImage.setOnClickListener(v->closeFullScreen());fullScreenImage.setOnKeyListener((v,k,e)->{if(e.getAction()==KeyEvent.ACTION_UP&&(k==KeyEvent.KEYCODE_BACK||k==KeyEvent.KEYCODE_ESCAPE)){closeFullScreen();return true;}return false;});fullScreenDialog.setContentView(frame);fullScreenDialog.setOnDismissListener(d->{fullScreenDialog=null;fullScreenImage=null;});Window w=fullScreenDialog.getWindow();if(w!=null){w.setLayout(-1,-1);w.setFlags(1024,1024);w.getDecorView().setSystemUiVisibility(5894|1024|512);}fullScreenDialog.show();if(w!=null)w.setLayout(-1,-1);fullScreenImage.requestFocus();}
  void closeFullScreen(){if(fullScreenDialog!=null)fullScreenDialog.dismiss();}
- void gallery(){LinearLayout intro=new LinearLayout(this);intro.setOrientation(1);intro.setPadding(dp(14),dp(10),dp(14),dp(12));intro.setBackground(shape(0xff10233b,0xff254568));TextView title=txt("图片库",21,-1,true);intro.addView(title);TextView sub=txt("共 "+pics.size()+" 张图片 · 选择缩略图可播放或管理",13,0xffb8cce4,false);LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(5);intro.addView(sub,sp);LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,-2);ip.bottomMargin=dp(12);body.addView(intro,ip);LinearLayout tools=new LinearLayout(this);tools.setGravity(Gravity.CENTER_VERTICAL);TextView count=txt("图库内容",14,0xffd5e5f7,true);tools.addView(count,new LinearLayout.LayoutParams(0,dp(38),1));TextView add=btn("＋ 导入图片",()->pick());tools.addView(add,new LinearLayout.LayoutParams(dp(150),dp(40)));LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,-2);tp.bottomMargin=dp(8);body.addView(tools,tp);ScrollView sc=new ScrollView(this);sc.setClipToPadding(false);sc.setPadding(dp(4),dp(4),dp(4),dp(8));body.addView(sc,new LinearLayout.LayoutParams(-1,0,1));GridLayout g=new GridLayout(this);g.setColumnCount(4);g.setUseDefaultMargins(false);sc.addView(g);for(int i=0;i<pics.size();i++){final int n=i;LinearLayout cell=new LinearLayout(this);cell.setOrientation(1);cell.setPadding(dp(6),dp(6),dp(6),dp(8));cell.setBackground(shape(0xff12243b,0xff263e5b));ImageView im=new ImageView(this);im.setImageBitmap(bitmap(pics.get(i),140));im.setScaleType(ImageView.ScaleType.CENTER_CROP);cell.addView(im,new LinearLayout.LayoutParams(-1,dp(96)));cell.addView(txt(pics.get(i).getName(),10,-1,false));cell.setFocusable(true);cell.setOnFocusChangeListener((v,has)->v.animate().scaleX(has?1.035f:1f).scaleY(has?1.035f:1f).setDuration(150).start());cell.setOnClickListener(v->new AlertDialog.Builder(this).setTitle(pics.get(n).getName()).setItems(new String[]{"播放","删除"},(x,w)->{if(w==0){pos=n;page=0;render();}else new AlertDialog.Builder(this).setMessage("只删除图库副本，不影响原文件。").setNegativeButton("取消",null).setPositiveButton("删除",(q,z)->{pics.get(n).delete();load();render();}).show();}).show());GridLayout.LayoutParams gp=new GridLayout.LayoutParams();gp.width=0;gp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);gp.setMargins(dp(5),dp(5),dp(5),dp(5));g.addView(cell,gp);}}
+ void gallery(){
+  LinearLayout intro=new LinearLayout(this);intro.setOrientation(1);intro.setPadding(dp(14),dp(10),dp(14),dp(12));intro.setBackground(shape(0xff10233b,0xff254568));
+  TextView title=txt(selectionMode?"批量管理图片":"图片库",21,-1,true);intro.addView(title);
+  TextView sub=txt(selectionMode?"已选择 "+selectedPaths.size()+" / "+pics.size()+" 张图片":"共 "+pics.size()+" 张图片 · 可进入批量选择模式",13,0xffb8cce4,false);
+  LinearLayout.LayoutParams sp=new LinearLayout.LayoutParams(-1,-2);sp.topMargin=dp(5);intro.addView(sub,sp);
+  LinearLayout.LayoutParams ip=new LinearLayout.LayoutParams(-1,-2);ip.bottomMargin=dp(10);body.addView(intro,ip);
+  LinearLayout tools=new LinearLayout(this);tools.setGravity(Gravity.CENTER_VERTICAL);
+  TextView count=txt("图库内容："+pics.size()+" 张",14,0xffd5e5f7,true);tools.addView(count,new LinearLayout.LayoutParams(0,dp(42),1));
+  if(selectionMode){
+   TextView all=btn(selectedPaths.size()==pics.size()?"取消全选":"全选",()->{if(selectedPaths.size()==pics.size())selectedPaths.clear();else{selectedPaths.clear();for(File f:pics)selectedPaths.add(f.getAbsolutePath());}render();});
+   tools.addView(all,new LinearLayout.LayoutParams(dp(90),dp(40)));
+   TextView del=btn("删除所选 ("+selectedPaths.size()+")",()->deleteSelected());LinearLayout.LayoutParams dl=new LinearLayout.LayoutParams(dp(150),dp(40));dl.leftMargin=dp(6);tools.addView(del,dl);
+   TextView cancel=btn("完成",()->{selectionMode=false;selectedPaths.clear();render();});LinearLayout.LayoutParams cl=new LinearLayout.LayoutParams(dp(86),dp(40));cl.leftMargin=dp(6);tools.addView(cancel,cl);
+  }else{
+   TextView select=btn("批量选择",()->{selectionMode=true;selectedPaths.clear();render();});tools.addView(select,new LinearLayout.LayoutParams(dp(112),dp(40)));
+   TextView add=btn("＋ 导入图片",()->pick());LinearLayout.LayoutParams al=new LinearLayout.LayoutParams(dp(140),dp(40));al.leftMargin=dp(6);tools.addView(add,al);
+  }
+  LinearLayout.LayoutParams tp=new LinearLayout.LayoutParams(-1,-2);tp.bottomMargin=dp(8);body.addView(tools,tp);
+  ScrollView sc=new ScrollView(this);sc.setClipToPadding(false);sc.setPadding(dp(4),dp(4),dp(4),dp(8));body.addView(sc,new LinearLayout.LayoutParams(-1,0,1));
+  GridLayout g=new GridLayout(this);g.setColumnCount(4);g.setUseDefaultMargins(false);sc.addView(g);
+  for(int i=0;i<pics.size();i++){
+   final int n=i;File photo=pics.get(i);boolean chosen=selectedPaths.contains(photo.getAbsolutePath());
+   LinearLayout cell=new LinearLayout(this);cell.setOrientation(1);cell.setPadding(dp(6),dp(6),dp(6),dp(8));cell.setBackground(shape(chosen?0xff174c70:0xff12243b,chosen?0xff53b5ff:0xff263e5b));
+   ImageView im=new ImageView(this);im.setImageBitmap(bitmap(photo,160));im.setScaleType(ImageView.ScaleType.CENTER_CROP);cell.addView(im,new LinearLayout.LayoutParams(-1,dp(96)));
+   TextView name=txt((chosen?"✓ ":"")+photo.getName(),10,chosen?0xff8fd0ff:-1,true);name.setMaxLines(2);cell.addView(name);
+   cell.setFocusable(true);cell.setOnFocusChangeListener((v,has)->v.animate().scaleX(has?1.035f:1f).scaleY(has?1.035f:1f).setDuration(150).start());
+   cell.setOnClickListener(v->{
+    if(selectionMode){if(selectedPaths.contains(photo.getAbsolutePath()))selectedPaths.remove(photo.getAbsolutePath());else selectedPaths.add(photo.getAbsolutePath());render();}
+    else new AlertDialog.Builder(this).setTitle(photo.getName()).setItems(new String[]{"播放","加入批量选择","删除"},(x,w)->{
+     if(w==0){pos=n;selectionMode=false;selectedPaths.clear();page=0;render();}
+     else if(w==1){selectionMode=true;selectedPaths.add(photo.getAbsolutePath());render();}
+     else new AlertDialog.Builder(this).setMessage("只删除图库副本，不影响原文件。").setNegativeButton("取消",null).setPositiveButton("删除",(q,z)->{photo.delete();load();render();}).show();
+    }).show();
+   });
+   GridLayout.LayoutParams gp=new GridLayout.LayoutParams();gp.width=0;gp.columnSpec=GridLayout.spec(GridLayout.UNDEFINED,1f);gp.setMargins(dp(5),dp(5),dp(5),dp(5));g.addView(cell,gp);
+  }
+ }
+ void deleteSelected(){
+  if(selectedPaths.isEmpty()){new AlertDialog.Builder(this).setMessage("请先选择要删除的图片。").setPositiveButton("知道了",null).show();return;}
+  int amount=selectedPaths.size();
+  new AlertDialog.Builder(this).setTitle("批量删除").setMessage("确定删除选中的 "+amount+" 张图片吗？\\n只删除小李视觉图库副本，不影响手机、U盘或其他位置的原文件。")
+   .setNegativeButton("取消",null).setPositiveButton("确认删除",(d,w)->{
+    int deleted=0;for(String path:new HashSet<>(selectedPaths)){File f=new File(path);if(f.exists()&&f.delete())deleted++;}
+    selectedPaths.clear();selectionMode=false;load();
+    new AlertDialog.Builder(this).setMessage("已删除 "+deleted+" 张图片。").setPositiveButton("确定",(a,b)->render()).setOnCancelListener(a->render()).show();
+   }).show();
+ }
  void pick(){Intent i=new Intent("android.intent.action.OPEN_DOCUMENT");i.addCategory("android.intent.category.OPENABLE");i.setType("image/*");i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE,true);startActivityForResult(i,5);}
  protected void onActivityResult(int r,int c,Intent d){super.onActivityResult(r,c,d);if(r==5&&c==-1&&d!=null)new Thread(()->{try{if(d.getClipData()!=null)for(int i=0;i<d.getClipData().getItemCount();i++)copy(d.getClipData().getItemAt(i).getUri());else if(d.getData()!=null)copy(d.getData());}catch(Exception e){}runOnUiThread(()->{load();page=0;render();});}).start();}
  String pickedName(android.net.Uri u){String name=null;try(Cursor c=getContentResolver().query(u,null,null,null,null)){if(c!=null&&c.moveToFirst()){int i=c.getColumnIndex(OpenableColumns.DISPLAY_NAME);if(i>=0)name=c.getString(i);}}if(name==null||name.trim().isEmpty())name="image_"+System.currentTimeMillis()+".jpg";name=new File(name).getName().replaceAll("[^A-Za-z0-9._-]","_");if(!name.matches("(?i).+\\.(jpg|jpeg|png|webp|gif|bmp)$"))name+=".jpg";return System.currentTimeMillis()+"_"+UUID.randomUUID().toString().substring(0,6)+"_"+name;}
@@ -52,7 +98,7 @@ public class MainActivity extends Activity{
  String uploadToken(){String t=getPreferences(0).getString("upload_token",null);if(t==null){t=UUID.randomUUID().toString().replace("-","");getPreferences(0).edit().putString("upload_token",t).apply();}return t;}
  void server(){try{if(server!=null)server.stop();server=new PhotoServer(8765,dir(),uploadToken(),()->runOnUiThread(()->{load();if(page==0)render();}));server.start(NanoHTTPD.SOCKET_READ_TIMEOUT,false);}catch(Exception e){}}
  public boolean onKeyDown(int k,KeyEvent e){if(k==KeyEvent.KEYCODE_MENU){new AlertDialog.Builder(this).setItems(new String[]{"下一张","暂停 / 继续","图片管理"},(d,w)->{if(w==0&&!pics.isEmpty())pos=(pos+1)%pics.size();if(w==1)playing=!playing;if(w==2)page=1;render();}).show();return true;}return super.onKeyDown(k,e);}
- public void onBackPressed(){if(fullScreenDialog!=null&&fullScreenDialog.isShowing()){closeFullScreen();return;}if(page!=0){page=0;render();}else super.onBackPressed();}protected void onDestroy(){h.removeCallbacks(tick);if(server!=null)server.stop();super.onDestroy();}
+ public void onBackPressed(){if(fullScreenDialog!=null&&fullScreenDialog.isShowing()){closeFullScreen();return;}if(selectionMode){selectionMode=false;selectedPaths.clear();render();return;}if(page!=0){page=0;render();}else super.onBackPressed();}protected void onDestroy(){h.removeCallbacks(tick);if(server!=null)server.stop();super.onDestroy();}
  static class PhotoServer extends NanoHTTPD{
   File dir;String token;Runnable changed;
   PhotoServer(int p,File f,String t,Runnable r)throws IOException{super(p);dir=f;token=t;changed=r;}
