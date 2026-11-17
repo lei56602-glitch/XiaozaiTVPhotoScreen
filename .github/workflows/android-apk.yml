@@ -8,6 +8,7 @@ on:
       - "source.zip"
       - "*.zip"
       - "patches/**"
+      - "v2-src/**"
       - ".github/workflows/android-apk.yml"
 
 permissions:
