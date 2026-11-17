@@ -7,6 +7,7 @@ on:
     paths:
       - "source.zip"
       - "*.zip"
+      - "patches/**"
       - ".github/workflows/android-apk.yml"
 
 permissions:
@@ -15,12 +16,11 @@ permissions:
 jobs:
   build:
     runs-on: ubuntu-latest
-
     steps:
       - name: Checkout repository
         uses: actions/checkout@v4
 
-      - name: Locate and extract source ZIP
+      - name: Extract and update Android source
         shell: bash
         run: |
           set -euo pipefail
@@ -30,19 +30,26 @@ jobs:
             ZIP_FILE="$(find . -maxdepth 1 -type f -name '*.zip' -print -quit)"
           fi
           if [ -z "${ZIP_FILE:-}" ]; then
-            echo "::error::No source ZIP found in the repository root."
+            echo "::error::No source ZIP found in repository root."
             exit 1
           fi
-          echo "Extracting: $ZIP_FILE"
           mkdir -p extracted
           unzip -oq "$ZIP_FILE" -d extracted
-          echo "Extracted project files:"
-          find extracted -maxdepth 6 -type f | head -300
+          SETTINGS_FILE="$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
+          if [ -z "$SETTINGS_FILE" ]; then
+            echo "::error::Android Gradle settings file not found."
+            exit 1
+          fi
+          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
+          patch -p1 --batch -d "$PROJECT_DIR" < "$GITHUB_WORKSPACE/patches/xiaozai-v1.1.patch"
+          echo "PROJECT_DIR=$PROJECT_DIR" >> "$GITHUB_ENV"
+          echo "Updated source files:"
+          find "$PROJECT_DIR" -maxdepth 8 -type f | sort
 
-      - name: Upload extracted source for inspection
+      - name: Upload updated source
         uses: actions/upload-artifact@v4
         with:
-          name: XiaozaiTVPhotoScreen-source
+          name: XiaozaiTVPhotoScreen-source-v1.1
           path: extracted/
           if-no-files-found: error
           retention-days: 3
@@ -64,18 +71,11 @@ jobs:
           packages: platform-tools
           accept-android-sdk-licenses: true
 
-      - name: Find Android project and build APK
+      - name: Build APK
         shell: bash
         run: |
           set -euo pipefail
-          SETTINGS_FILE="$(find extracted -type f \( -name settings.gradle -o -name settings.gradle.kts \) -print -quit)"
-          if [ -z "$SETTINGS_FILE" ]; then
-            echo "::error::Could not find settings.gradle or settings.gradle.kts in the extracted ZIP."
-            exit 1
-          fi
-          PROJECT_DIR="$(dirname "$SETTINGS_FILE")"
           cd "$PROJECT_DIR"
-          echo "Android project directory: $PROJECT_DIR"
           gradle --version
           gradle --no-daemon assembleDebug
           mkdir -p "$GITHUB_WORKSPACE/apk-output"
@@ -88,6 +88,7 @@ jobs:
       - name: Upload APK artifact
         uses: actions/upload-artifact@v4
         with:
-          name: XiaozaiTVPhotoScreen-debug-apk
+          name: XiaozaiTVPhotoScreen-debug-apk-v1.1
           path: apk-output/*.apk
           if-no-files-found: error
+          retention-days: 90
