@@ -126,11 +126,11 @@ public class MainActivity extends Activity{
    try{
     if(!authorized(s))return newFixedLengthResponse(Response.Status.FORBIDDEN,"text/plain","Access denied");
     if(Method.GET.equals(s.getMethod())){
-     String html="<meta charset='utf-8'><meta name='viewport' content='width=device-width'><body style='background:#101827;color:white;font:18px Arial;padding:24px'><h2>小李视觉图片上传</h2><input id='photoFiles' type='file' accept='image/*' multiple><button onclick='go()'>开始上传</button><p id='status'>选择图片</p><script>async function go(){const files=document.getElementById('photoFiles').files;const status=document.getElementById('status');for(const x of files){const token=new URLSearchParams(location.search).get('token');const r=await fetch('/up?token='+encodeURIComponent(token)+'&name='+encodeURIComponent(x.name),{method:'POST',body:x});if(!r.ok){status.innerText='上传失败：'+x.name;return}status.innerText='已上传：'+x.name}status.innerText='上传完成'}</script>";
+     String html="<meta charset='utf-8'><meta name='viewport' content='width=device-width'><body style='background:#101827;color:white;font:18px Arial;padding:24px'><h2>小李视觉图片上传</h2><input id='photoFiles' type='file' accept='image/*' multiple><button onclick='go()'>开始上传</button><p id='status'>选择图片</p><script>async function go(){const files=document.getElementById('photoFiles').files;const status=document.getElementById('status');for(const x of files){const token=new URLSearchParams(location.search).get('token');const data=new FormData();data.append('file',x,x.name);const r=await fetch('/up?token='+encodeURIComponent(token)+'&name='+encodeURIComponent(x.name),{method:'POST',body:data});if(!r.ok){status.innerText='上传失败：'+x.name;return}status.innerText='已上传：'+x.name}status.innerText='上传完成'}</script>";
      return newFixedLengthResponse(html);
     }
     if(Method.POST.equals(s.getMethod())&&s.getUri().equals("/up")){
-     Map<String,String> body=new HashMap<>();s.parseBody(body);String tmp=body.get("postData");
+     Map<String,String> body=new HashMap<>();s.parseBody(body);String tmp=body.get("file");if(tmp==null)tmp=body.get("postData");
      if(tmp==null)return newFixedLengthResponse(Response.Status.BAD_REQUEST,"text/plain","empty");
      File temp=new File(tmp);
      if(!temp.isFile()||temp.length()==0||temp.length()>25L*1024*1024)return newFixedLengthResponse(Response.Status.BAD_REQUEST,"text/plain","Invalid file size");
